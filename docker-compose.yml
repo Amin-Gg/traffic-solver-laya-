@@ -6,10 +6,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - HF_HOME=/root/.cache/huggingface
-      - LAYA_MODEL=convaiinnovations/laya
-    volumes:
-      - traffic_ai_lab_hf_cache:/root/.cache/huggingface
-volumes:
-  traffic_ai_lab_hf_cache:
-    name: traffic_ai_lab_hf_cache
+      TYPESAFE_API_KEY: ${TYPESAFE_API_KEY:-}
+      JEV_MODEL: ${JEV_MODEL:-jev-latest}
+      JEV_PREWARM: ${JEV_PREWARM:-0}

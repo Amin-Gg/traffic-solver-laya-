@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import random
 import time
-import threading
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from secrets import compare_digest
 from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
@@ -15,23 +16,43 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from .brains import DIRS, LAYA_QUESTION, LayaBrain, LLMBrain, reference_axis, state_text
+from .brains import DIRS, JEV_QUESTION, JevBrain, LLMBrain, reference_axis, state_text
 
 BASE = Path(__file__).resolve().parent
-laya = LayaBrain()
+jev = JevBrain()
 llm = LLMBrain()
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # Load Laya in the background so the page is usable immediately and the first decision is fast.
-    if os.getenv("LAYA_PRELOAD", "1") != "0":
-        threading.Thread(target=laya.load, daemon=True).start()
-    yield
+    prewarm = asyncio.create_task(jev.warm_cache()) if os.getenv("JEV_PREWARM") == "1" else None
+    try:
+        yield
+    finally:
+        if prewarm:
+            prewarm.cancel()
+            with suppress(asyncio.CancelledError):
+                await prewarm
 
 
 app = FastAPI(title="Traffic AI Lab", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
+
+
+# Colab's public tunnel uses a separate password so visitors cannot spend the API key's quota.
+if tunnel_password := os.getenv("JEV_TUNNEL_PASSWORD"):
+    tunnel_credentials = base64.b64encode(f"colab:{tunnel_password}".encode())
+
+    @app.middleware("http")
+    async def protect_tunnel(request, call_next):
+        scheme, _, token = request.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() != "basic" or not compare_digest(token.encode(), tunnel_credentials):
+            return JSONResponse(
+                {"error": "Use the session credentials shown in Colab."},
+                status_code=401,
+                headers={"WWW-Authenticate": 'Basic realm="Traffic Solver Colab"'},
+            )
+        return await call_next(request)
 
 
 class Sensors(BaseModel):
@@ -47,7 +68,7 @@ class Sensors(BaseModel):
 
 
 class DecideRequest(BaseModel):
-    brain: Literal["laya", "llm"] = "laya"
+    brain: Literal["jev", "laya", "llm"] = "jev"
     intersections: List[Sensors]
 
 
@@ -63,8 +84,9 @@ def root():
     return FileResponse(BASE / "static" / "index.html")
 
 
-@app.get("/laya")
-def laya_page():
+@app.get("/jev")
+@app.get("/laya", include_in_schema=False)
+def jev_page():
     return FileResponse(BASE / "static" / "laya.html")
 
 
@@ -73,29 +95,31 @@ class PlaygroundRequest(BaseModel):
     questions: Dict[str, Any]
 
 
-@app.post("/api/laya/predict")
-async def laya_predict(req: PlaygroundRequest):
-    """General-purpose Laya call for the playground page: any text/JSON state, any typed questions."""
+@app.post("/api/jev/predict")
+@app.post("/api/laya/predict", include_in_schema=False)
+async def jev_predict(req: PlaygroundRequest):
+    """General-purpose Jev call for the playground page: any text/JSON state, any typed questions."""
     if not req.questions or len(req.questions) > 16:
         return JSONResponse({"error": "بین ۱ تا ۱۶ سؤال بفرست."}, status_code=400)
     if len(json.dumps(req.state, ensure_ascii=False)) > 6000:
         return JSONResponse({"error": "متن ورودی بیش از ۶۰۰۰ نویسه است."}, status_code=400)
     t = time.perf_counter()
     try:
-        result = await asyncio.to_thread(laya.predict_raw, req.state, req.questions)
-    except ValueError as e:  # malformed question definitions: Laya names the question and the fix
+        result = await jev.predict_raw(req.state, req.questions)
+    except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except RuntimeError as e:
         return JSONResponse({"error": str(e)}, status_code=503)
-    return {"latency_ms": round((time.perf_counter() - t) * 1000, 1), "model": laya.model_id,
-            "device": laya.device, **result}
+    return {"latency_ms": round((time.perf_counter() - t) * 1000, 1), "model": jev.model_id,
+            "device": jev.device, **result}
 
 
 @app.get("/api/status")
 def status():
-    return {"laya": {"status": laya.status, "model": laya.model_id, "device": laya.device, "error": laya.error,
-                     "question": LAYA_QUESTION["green"], "prewarm": laya.prewarm,
-                     "model_ms_per_sentence": laya.model_ms_per_sentence},
+    model = {"status": jev.status, "model": jev.model_id, "device": jev.device, "error": jev.error,
+             "question": JEV_QUESTION["green"], "prewarm": jev.prewarm,
+             "model_ms_per_sentence": jev.model_ms_per_sentence}
+    return {"jev": model, "laya": model,
             "llm": {"ready": llm.ready, "provider": llm.settings.get("provider"), "model": llm.settings.get("model"),
                     "error": llm.last_error}}
 
@@ -103,11 +127,14 @@ def status():
 @app.post("/api/decide")
 async def decide(req: DecideRequest):
     states = [s.model_dump() for s in req.intersections]
-    brain = laya if req.brain == "laya" else llm
+    brain = llm if req.brain == "llm" else jev
     decisions, ms, source = await brain.decide(states)
     body: Dict[str, Any] = {"source": source, "latency_ms": round(ms, 1), "decisions": decisions}
-    if brain is laya and source == "laya":
-        body["stats"] = laya.last_stats
+    if brain is jev:
+        if source != "reference-fallback":
+            body["stats"] = jev.last_stats
+        if source != "jev":
+            body["error"] = jev.error
     if source == "llm-error":
         body["error"] = llm.last_error
     return body
@@ -153,7 +180,7 @@ async def benchmark():
     out: Dict[str, Any] = {"cases": len(cases),
                            "note": "Reference = قاعده‌ی شفاف فشار صف + اولویت امدادی؛ دقت ایمنی واقعی نیست."}
     picks: Dict[str, Dict[str, Any]] = {}
-    for name, brain in (("laya", laya), ("llm", llm)):
+    for name, brain in (("jev", jev), ("llm", llm)):
         if name == "llm" and not llm.ready:
             out[name] = None
             continue
@@ -162,9 +189,12 @@ async def benchmark():
         ok = sum(1 for s in cases if d.get(s["id"], {}).get("axis") == ref[s["id"]])
         em = [s for s in cases if s.get("emergency_dir")]
         em_ok = sum(1 for s in em if d.get(s["id"], {}).get("axis") == ref[s["id"]])
-        out[name] = {"source": src, "latency_ms": round(ms, 1), "per_case_ms": (laya.model_ms_per_sentence if brain is laya and laya.model_ms_per_sentence
+        out[name] = {"source": src, "latency_ms": round(ms, 1), "per_case_ms": (jev.model_ms_per_sentence if brain is jev and jev.model_ms_per_sentence
                                          else round(ms / len(cases), 1)),
                      "alignment": round(100 * ok / len(cases), 1), "emergency": f"{em_ok}/{len(em)}"}
     out["samples"] = [{"id": s["id"], "text": state_text(s), "reference": ref[s["id"]],
                        **{k: v.get(s["id"], {}).get("axis") for k, v in picks.items()}} for s in cases[:8]]
+    out["laya"] = out["jev"]
+    for sample in out["samples"]:
+        sample["laya"] = sample.get("jev")
     return out

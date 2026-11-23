@@ -5,20 +5,16 @@ Pipeline for every intersection (the same for every brain):
     browser sensors  ->  sensor fusion (pressure per axis)  ->  short English sentence
                      ->  brain answers "ns" or "ew"          ->  browser switches the lights
 
-Laya is a non-autoregressive *encoder* (ModernBERT, 512-token context). It answers typed
-questions over a short state in one forward pass; it does not do arithmetic well. So the
-sensor layer turns raw counts into qualitative bands ("light", "heavy", ...) and Laya decides
-which road gets green, with emergency vehicles taking priority. One state per intersection,
-all intersections scored in a single `predict_batch` call.
+The sensor layer turns raw counts into qualitative bands ("light", "heavy", ...).
+Jev chooses a direction from each intersection's short description and the answers
+are cached by description.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import os
-import threading
 import time
-from collections import OrderedDict
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
@@ -27,7 +23,7 @@ DIRS = ("N", "S", "E", "W")
 AXIS_DIRS = {"ns": ("N", "S"), "ew": ("E", "W")}
 AXIS_EN = {"ns": "north-south", "ew": "east-west"}
 
-LAYA_QUESTION = {
+JEV_QUESTION = {
     "green": {
         "type": "choice",
         "instructions": "Give the green light to the busier road; an ambulance always gets green first.",
@@ -90,9 +86,7 @@ BANDS = ("empty", "light", "moderate", "heavy", "severely jammed")
 
 def compose_text(band_ns: str, band_ew: str, busier: Optional[str], ambulance: Optional[str]) -> str:
     text = f"North-south traffic is {band_ns}. East-west traffic is {band_ew}."
-    # Laya is an encoder, not a calculator: comparing two band words alone it favours whichever road is
-    # named first (~75% on all pairs). Stating the comparison explicitly makes it 75/75, including the
-    # cases where an ambulance must override it.
+    # State the comparison explicitly, including when an ambulance can override it.
     text += f" More cars are waiting on the {AXIS_EN[busier]} road." if busier else " Both roads are equally busy."
     if ambulance:
         text += f" An ambulance is coming on the {AXIS_EN[ambulance]} road."
@@ -112,7 +106,7 @@ def all_texts() -> List[str]:
 
 
 def state_text(s: Dict[str, Any]) -> str:
-    """The exact sentence Laya reads for one intersection."""
+    """The exact sentence Jev reads for one intersection."""
     p = axis_pressure(s)
     busier = None if abs(p["ns"] - p["ew"]) <= 0.3 else ("ns" if p["ns"] > p["ew"] else "ew")
     return compose_text(band(p["ns"]), band(p["ew"]), busier, emergency_axis(s))
@@ -123,7 +117,7 @@ AXIS_FA = {"ns": "شمال–جنوب", "ew": "شرق–غرب"}
 
 
 def state_fa(s: Dict[str, Any]) -> str:
-    """Persian translation of exactly what Laya reads (for the UI)."""
+    """Persian translation of exactly what Jev reads (for the UI)."""
     p = axis_pressure(s)
     parts = [f"خیابان شمال–جنوب {BAND_FA[band(p['ns'])]}", f"خیابان شرق–غرب {BAND_FA[band(p['ew'])]}"]
     if abs(p["ns"] - p["ew"]) > 0.3:
@@ -137,7 +131,7 @@ def state_fa(s: Dict[str, Any]) -> str:
 
 
 def reference_axis(s: Dict[str, Any]) -> str:
-    """Transparent rule used as a reference line (and as fallback when Laya is unavailable)."""
+    """Transparent rule used as a reference line (and as fallback when Jev is unavailable)."""
     em = emergency_axis(s)
     if em:
         return em
@@ -177,105 +171,172 @@ def _decision(s: Dict[str, Any], axis: str, probs: Dict[str, float], text: str) 
 
 # --------------------------------------------------------------------------- brains
 
-class LayaBrain:
-    name = "laya"
+JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+JEV_BATCH_SIZE = 4
 
-    def __init__(self, model_id: Optional[str] = None):
-        self.model_id = model_id or os.getenv("LAYA_MODEL", "convaiinnovations/laya")
-        self.agent = None
-        self.status = "idle"  # idle | loading | ready | error
-        self.error: Optional[str] = None
-        self.device = None
-        self._load_lock = threading.Lock()
-        self._predict_lock = threading.Lock()
-        # Laya is deterministic: the same sentence always gets the same answer. Only sentences the
-        # model has not seen yet are sent to it, so most decision rounds finish in milliseconds.
-        self._cache: "OrderedDict[str, Dict[str, Any]]" = OrderedDict()
+
+class JevBrain:
+    name = "jev"
+
+    def __init__(self):
+        self.model_id = os.getenv("JEV_MODEL", "").strip() or "jev-latest"
+        self.api_key = os.getenv("TYPESAFE_API_KEY", "").strip()
+        self.device = "TypeSafe API"
+        self.error = None if self.api_key else "Set TYPESAFE_API_KEY to enable Jev."
+        self.retry_at = 0.0
+        self._lock = asyncio.Lock()
+        self._cache: Dict[str, Dict[str, Any]] = {}
         self.last_stats = {"fresh": 0, "cached": 0, "model_ms": 0.0}
         self.prewarm = {"done": 0, "total": 0}
         self.model_ms_samples: List[float] = []
 
-    def load(self) -> None:
-        with self._load_lock:
-            if self.status in ("ready", "error"):
-                return
-            self.status = "loading"
-            try:
-                import laya
+    @property
+    def status(self) -> str:
+        return "error" if self.error else "ready"
 
-                agent = laya.load(self.model_id)
-                agent.predict_batch([state_text({"queues": {"N": 3}})], LAYA_QUESTION)  # warm-up
-                self.agent = agent
-                self.device = str(getattr(agent, "device", "cpu"))
-                self.status = "ready"
-                threading.Thread(target=self._prewarm, daemon=True).start()
-            except Exception as e:  # pragma: no cover - depends on environment
-                self.error = f"{type(e).__name__}: {e}"
-                self.status = "error"
+    def _check_available(self) -> None:
+        if not self.api_key or time.monotonic() < self.retry_at:
+            raise RuntimeError(self.error or "Jev is temporarily unavailable.")
 
-    def _prewarm(self) -> None:
-        """Answer every possible sentence once, in small chunks so live requests can interleave."""
-        todo = [t for t in all_texts() if t not in self._cache]
-        self.prewarm = {"done": 0, "total": len(todo)}
-        for k in range(0, len(todo), 6):
-            chunk = todo[k:k + 6]
-            t0 = time.perf_counter()
-            with self._predict_lock:
-                results = self.agent.predict_batch(chunk, LAYA_QUESTION)
-            self._record_model_ms((time.perf_counter() - t0) * 1000 / len(chunk))
-            for t, r in zip(chunk, results):
-                self._cache[t] = r["answers"]["green"]
-            self.prewarm["done"] = min(len(todo), k + len(chunk))
+    def _unavailable(self, message: str, retry_after: float = 10.0) -> RuntimeError:
+        self.error = message
+        self.retry_at = max(self.retry_at, time.monotonic() + retry_after)
+        return RuntimeError(message)
 
-    def _record_model_ms(self, per_sentence_ms: float) -> None:
-        self.model_ms_samples.append(per_sentence_ms)
-        del self.model_ms_samples[:-50]
+    def _client(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=httpx.Timeout(8.0, connect=3.0),
+        )
+
+    async def _predict(self, client: httpx.AsyncClient, state: Any, questions: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            response = await client.post(JEV_ENDPOINT, json={
+                "model": self.model_id, "state": state, "questions": questions,
+            })
+        except httpx.RequestError as exc:
+            raise self._unavailable("Could not reach the TypeSafe API.") from exc
+
+        code = response.status_code
+        if code in (400, 413, 422):
+            raise ValueError(f"Jev rejected the state or questions (HTTP {code}). Check the question format and limits.")
+        if code in (401, 403):
+            raise self._unavailable(f"TypeSafe rejected access (HTTP {code}). Check the API key and model access.", 60)
+        if code == 402:
+            raise self._unavailable("TypeSafe reports insufficient credit (HTTP 402).", 60)
+        if code == 429:
+            retry_after = response.headers.get("Retry-After", "")
+            delay = max(1, int(retry_after)) if retry_after.isdecimal() and len(retry_after) < 8 else 10
+            raise self._unavailable("TypeSafe API rate limit reached (HTTP 429).", delay)
+        if not response.is_success:
+            raise self._unavailable(f"TypeSafe API is unavailable (HTTP {code}).")
+
+        try:
+            result = response.json()
+            answers = result["answers"]
+            if set(answers) != set(questions) or any(
+                not isinstance(answer, dict) or answer.get("type") != questions[qid]["type"]
+                for qid, answer in answers.items()
+            ):
+                raise ValueError("Invalid answers")
+        except (KeyError, ValueError, TypeError, AttributeError) as exc:
+            raise self._unavailable("TypeSafe API returned an invalid answer.") from exc
+        if time.monotonic() >= self.retry_at:
+            self.error = None
+        return result
+
+    async def _green_answer(self, client: httpx.AsyncClient, text: str) -> Dict[str, Any]:
+        answer = (await self._predict(client, text, JEV_QUESTION))["answers"]["green"]
+        axis = answer.get("choice")
+        probabilities = answer.get("probabilities")
+        if axis not in ("ns", "ew") or not isinstance(probabilities, dict) or set(probabilities) != set(AXIS_DIRS) or any(
+            not isinstance(p, (int, float)) or not 0 <= p <= 1 for p in probabilities.values()
+        ):
+            raise self._unavailable("Jev returned an invalid traffic decision.")
+        return answer
 
     @property
     def model_ms_per_sentence(self) -> Optional[float]:
         m = self.model_ms_samples
         return round(sum(m) / len(m), 1) if m else None
 
-    def _decide_sync(self, states: List[Dict[str, Any]]) -> Tuple[Dict[str, Dict], str]:
-        texts = [state_text(s) for s in states]
-        if self.status != "ready":
-            self.load()
-        if self.agent is None:
-            out = {}
-            for s, t in zip(states, texts):
-                ax = reference_axis(s)
-                out[s["id"]] = _decision(s, ax, {ax: 1.0}, t)
-            return out, "reference-fallback"
-        fresh = [t for t in dict.fromkeys(texts) if t not in self._cache]
-        model_ms = 0.0
-        if fresh:
-            t0 = time.perf_counter()
-            with self._predict_lock:
-                results = self.agent.predict_batch(fresh, LAYA_QUESTION)
-            model_ms = (time.perf_counter() - t0) * 1000
-            self._record_model_ms(model_ms / len(fresh))
-            for t, r in zip(fresh, results):
-                self._cache[t] = r["answers"]["green"]
-        self.last_stats = {"fresh": len(fresh), "cached": len(texts) - len(fresh), "model_ms": round(model_ms, 1)}
-        out = {}
-        for s, t in zip(states, texts):
-            a = self._cache[t]
-            out[s["id"]] = _decision(s, a["choice"], a["probabilities"], t)
-        return out, "laya"
+    async def _fill_cache(self, texts: List[str]) -> Tuple[int, float]:
+        # Each distinct state gets its own Jev request. A shared lock prevents
+        # overlapping city views and prewarm from paying twice for the same state.
+        async with self._lock:
+            fresh = [t for t in dict.fromkeys(texts) if t not in self._cache]
+            if not fresh or not self.api_key or time.monotonic() < self.retry_at:
+                return 0, 0.0
+            start = time.perf_counter()
+            count = 0
+            async with self._client() as client:
+                for k in range(0, len(fresh), JEV_BATCH_SIZE):
+                    chunk = fresh[k:k + JEV_BATCH_SIZE]
+                    batch_started = time.perf_counter()
+                    answers = await asyncio.gather(
+                        *(self._green_answer(client, text) for text in chunk), return_exceptions=True,
+                    )
+                    for text, answer in zip(chunk, answers):
+                        if isinstance(answer, dict):
+                            self._cache[text] = answer
+                            count += 1
+                        elif isinstance(answer, ValueError):
+                            self._unavailable(str(answer))
+                        elif not isinstance(answer, RuntimeError):
+                            raise answer
+                    if self.error:
+                        break
+                    self.model_ms_samples.append((time.perf_counter() - batch_started) * 1000 / len(chunk))
+                    del self.model_ms_samples[:-50]
+            return count, (time.perf_counter() - start) * 1000
 
-    def predict_raw(self, state: Any, questions: Dict[str, Any]) -> Dict[str, Any]:
-        """Any state + any typed questions, straight to the model (used by the /laya playground)."""
-        if self.status != "ready":
-            self.load()
-        if self.agent is None:
-            raise RuntimeError(self.error or "Laya is not loaded")
-        with self._predict_lock:
-            return self.agent.predict(state, questions)
+    async def warm_cache(self) -> None:
+        if not self.api_key:
+            return
+        texts = all_texts()
+        self.prewarm = {"done": len(self._cache), "total": len(texts)}
+        for k in range(0, len(texts), JEV_BATCH_SIZE):
+            await self._fill_cache(texts[k:k + JEV_BATCH_SIZE])
+            self.prewarm["done"] = len(self._cache)
+            if self.error:
+                break
+
+    async def predict_raw(self, state: Any, questions: Dict[str, Any]) -> Dict[str, Any]:
+        """Send typed playground questions to Jev."""
+        if not isinstance(state, (str, dict, list)):
+            raise ValueError("State must be text, a JSON object, or an array.")
+        normalized = {}
+        for key, question in questions.items():
+            if not isinstance(question, dict) or question.get("type") not in ("choice", "score", "noul"):
+                raise ValueError(f"Invalid question {key!r}: choose choice, score, or noul.")
+            criteria = question.get("criteria")
+            if question["type"] == "choice" and isinstance(criteria, list):
+                question = {**question, "criteria": {label: label for label in criteria if isinstance(label, str)}}
+            normalized[key] = question
+        async with self._lock:
+            self._check_available()
+            async with self._client() as client:
+                return await self._predict(client, state, normalized)
 
     async def decide(self, states: List[Dict[str, Any]]) -> Tuple[Dict[str, Dict], float, str]:
-        t = time.perf_counter()
-        out, source = await asyncio.to_thread(self._decide_sync, states)
-        return out, (time.perf_counter() - t) * 1000, source
+        start = time.perf_counter()
+        texts = [state_text(s) for s in states]
+        fresh, model_ms = await self._fill_cache(texts)
+        out = {}
+        cached = 0
+        for s, text in zip(states, texts):
+            answer = self._cache.get(text)
+            if answer is None:
+                axis = reference_axis(s)
+                out[s["id"]] = {**_decision(s, axis, {axis: 1.0}, text), "source": "reference-fallback"}
+            else:
+                out[s["id"]] = _decision(s, answer["choice"], answer["probabilities"], text)
+                cached += 1
+        self.last_stats = {"fresh": fresh, "cached": cached - fresh, "model_ms": round(model_ms, 1)}
+        source = "jev" if cached == len(texts) and (texts or self.api_key) else (
+            "jev-partial-fallback" if cached else "reference-fallback"
+        )
+        return out, (time.perf_counter() - start) * 1000, source
 
 
 def parse_json_object(raw: str) -> Dict[str, Any]:

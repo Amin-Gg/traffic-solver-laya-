@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b1114">
-<title>Traffic AI Lab — Laya City</title>
+<title>Traffic AI Lab — Jev City</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -12,14 +12,14 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand"><span class="logo">L</span><div><b>Traffic AI Lab</b><small>چراغ‌های شهر با تصمیم Laya</small></div></div>
+  <div class="brand"><span class="logo">J</span><div><b>Traffic AI Lab</b><small>چراغ‌های شهر با تصمیم Jev</small></div></div>
   <nav class="tabs">
     <button class="tab active" data-tab="live">شهر زنده</button>
     <button class="tab" data-tab="compare">چرا سرعت مهم است؟</button>
-    <button class="tab" data-tab="how">Laya چطور تصمیم می‌گیرد؟</button>
+    <button class="tab" data-tab="how">Jev چطور تصمیم می‌گیرد؟</button>
   </nav>
   <div class="top-right">
-    <span id="layaPill" class="pill wait"><i></i><span>Laya: در حال اتصال…</span></span>
+    <span id="layaPill" class="pill wait"><i></i><span>Jev: در حال اتصال…</span></span>
     <button id="settingsBtn" class="ghost" title="تنظیم LLM برای مقایسه">⚙</button>
   </div>
 </header>
@@ -64,7 +64,7 @@
       </div>
 
       <div class="card speed-card">
-        <div class="card-h">سرعت تصمیم Laya</div>
+        <div class="card-h">سرعت تصمیم Jev</div>
         <div class="big"><b id="spdMs">—</b><span>میلی‌ثانیه برای هر ۹ چهارراه</span></div>
         <p id="spdText" class="muted"></p>
       </div>
@@ -72,8 +72,8 @@
       <div class="card ix-card">
         <div class="card-h">چهارراه <span id="ixId" class="mono accent-t">B2</span><small>روی هر چهارراه کلیک کن</small></div>
         <div id="ixCross" class="cross"></div>
-        <div class="kv"><span>Laya دید</span><p id="ixSaw">—</p></div>
-        <div class="kv"><span>Laya گفت</span><p id="ixSaid">—</p></div>
+        <div class="kv"><span>Jev دید</span><p id="ixSaw">—</p></div>
+        <div class="kv"><span>Jev گفت</span><p id="ixSaid">—</p></div>
         <div class="kv"><span>چراغ الان</span><p id="ixLight">—</p></div>
         <details><summary>متن دقیقی که مدل خواند (انگلیسی)</summary>
           <div id="ixText" class="laya-text" dir="ltr">—</div>
@@ -93,10 +93,10 @@
 <section id="tab-compare" class="page">
   <div class="cmp-intro">
     <div><b>همان مغز، همان شهر — فقط سرعت فرق دارد</b>
-      <small>دو شهر با خودروها و اتفاق‌های کاملاً یکسان. در شهر اول Laya بلافاصله تصمیم می‌گیرد؛ در شهر دوم همان تصمیم‌ها ۴ ثانیه دیرتر به چراغ می‌رسد (زمان پاسخ معمول یک LLM). دکمه‌ی «🚑 آمبولانس» را بزن و ببین کدام شهر زودتر راه را باز می‌کند.</small></div>
+      <small>دو شهر با خودروها و اتفاق‌های کاملاً یکسان. شهر اول تصمیم Jev را بعد از دریافت اجرا می‌کند و شهر دوم همان تصمیم را با ۴ ثانیه تأخیر اضافه اجرا می‌کند. دکمه‌ی «🚑 آمبولانس» را بزن و ببین کدام شهر زودتر راه را باز می‌کند.</small></div>
     <label class="sel">شهر دوم
       <select id="rightBrain">
-        <option value="slow">Laya با ۴ ثانیه تأخیر (شبیه LLM)</option>
+        <option value="slow">Jev با ۴ ثانیه تأخیر (شبیه LLM)</option>
         <option value="fixed">چراغ زمان‌ثابت ۳۰ ثانیه</option>
         <option value="llm">LLM واقعی</option>
       </select>
@@ -104,18 +104,18 @@
   </div>
   <div class="duo">
     <div class="city laya">
-      <div class="city-h"><div><b>⚡ Laya سریع</b><small id="cmpLeftSrc">—</small></div><div class="lat" id="cmpLeftLat">—</div></div>
+      <div class="city-h"><div><b>⚡ Jev سریع</b><small id="cmpLeftSrc">—</small></div><div class="lat" id="cmpLeftLat">—</div></div>
       <div id="cmpLeft" class="scene"></div>
       <div class="city-k" id="cmpLeftK"></div>
     </div>
     <div class="city other">
-      <div class="city-h"><div><b id="cmpRightName">🐢 Laya با ۴ ثانیه تأخیر</b><small id="cmpRightSrc">—</small></div><div class="lat" id="cmpRightLat">—</div></div>
+      <div class="city-h"><div><b id="cmpRightName">🐢 Jev با ۴ ثانیه تأخیر</b><small id="cmpRightSrc">—</small></div><div class="lat" id="cmpRightLat">—</div></div>
       <div id="cmpRight" class="scene"></div>
       <div class="city-k" id="cmpRightK"></div>
     </div>
   </div>
   <div class="cmp-bottom">
-    <div class="card"><div class="card-h">ماشین‌های ایستاده در طول زمان<small><i class="dot laya"></i>Laya سریع <i class="dot other"></i><span id="cmpLegend">با تأخیر</span></small></div><div id="cmpChart" class="chart tall"></div></div>
+    <div class="card"><div class="card-h">ماشین‌های ایستاده در طول زمان<small><i class="dot laya"></i>Jev سریع <i class="dot other"></i><span id="cmpLegend">با تأخیر</span></small></div><div id="cmpChart" class="chart tall"></div></div>
     <div class="card"><div class="card-h">نتیجه تا این لحظه</div><div id="cmpTable"></div>
       <p class="muted small-p">در آزمایش‌های ما (۳ شهر مختلف، هر کدام ۵ دقیقه با ۵ تا ۷ آمبولانس): با تأخیر ۰٫۳ ثانیه آمبولانس به‌طور میانگین ~۷ ثانیه پشت چراغ ماند، با ۴ ثانیه ~۱۵ و با ۸ ثانیه ~۲۳ ثانیه.</p></div>
   </div>
@@ -127,12 +127,12 @@
     <div class="pipeline">
       <div class="pl"><span>1</span><b>حسگرهای خیابان</b><p>برای هر ورودی چهارراه: تعداد ماشین ایستاده، ماشین در حال نزدیک‌شدن، بیشترین زمان انتظار، پُر بودن خیابان بعدی، آمبولانس و تصادف.</p></div>
       <div class="pl"><span>2</span><b>خلاصه به یک جمله</b><p>عددها به کلمه تبدیل می‌شوند (خالی / خلوت / متوسط / سنگین / خیلی سنگین) و گفته می‌شود صف کدام خیابان بیشتر است و آمبولانس کجاست.</p></div>
-      <div class="pl hl"><span>3</span><b>Laya — یک بار خواندن</b><p>مدل (ModernBERT، ۴۲۱ میلیون پارامتر) جمله و سؤال را یک بار می‌خواند و به هر گزینه یک احتمال می‌دهد. متن تولید نمی‌کند، پس سریع است و خروجی‌اش همیشه یکی از دو گزینه است. جمله‌ای که قبلاً دیده شده دوباره محاسبه نمی‌شود.</p></div>
-      <div class="pl"><span>4</span><b>قانون ایمنی چراغ</b><p>Laya فقط می‌گوید «سبز باید با کدام خیابان باشد». چراغ بعد از حداقل ۱۲ ثانیه سبز، ۲٫۵ ثانیه زرد و ۱٫۲ ثانیه قرمزِ کامل عوض می‌شود. برای آمبولانس حداقل سبز ۱٫۵ ثانیه است.</p></div>
+      <div class="pl hl"><span>3</span><b>Jev — انتخاب جهت سبز</b><p>برای هر وضعیت تازه، سرور جمله و سؤال را به API TypeSafe می‌فرستد و احتمال هر جهت را دریافت می‌کند. پاسخ هر جمله برای استفاده‌ی دوباره ذخیره می‌شود.</p></div>
+      <div class="pl"><span>4</span><b>قانون ایمنی چراغ</b><p>Jev فقط می‌گوید «سبز باید با کدام خیابان باشد». چراغ بعد از حداقل ۱۲ ثانیه سبز، ۲٫۵ ثانیه زرد و ۱٫۲ ثانیه قرمزِ کامل عوض می‌شود. برای آمبولانس حداقل سبز ۱٫۵ ثانیه است.</p></div>
     </div>
 
     <div class="play card">
-      <div class="card-h">آزمایشگاه: خودت از Laya بپرس<small>هر تغییر مستقیم به مدل واقعی فرستاده می‌شود</small></div>
+      <div class="card-h">آزمایشگاه: خودت از Jev بپرس<small>وضعیت تازه برای Jev فرستاده می‌شود</small></div>
       <div class="play-grid">
         <div class="play-in">
           <div class="sl"><label>ماشین منتظر در ورودی شمال</label><input type="range" min="0" max="20" value="6" data-q="N"><output></output></div>
@@ -144,10 +144,10 @@
           <div class="sl"><label>آمبولانس</label><select id="playAmb"><option value="">ندارد</option><option value="N">از شمال</option><option value="S">از جنوب</option><option value="E">از شرق</option><option value="W">از غرب</option></select></div>
         </div>
         <div class="play-out">
-          <small>Laya این را دید</small>
+          <small>Jev این را دید</small>
           <div id="playFa" class="fa-box">—</div>
           <div id="playText" class="laya-text" dir="ltr">—</div>
-          <small>پاسخ Laya</small>
+          <small>پاسخ Jev</small>
           <div id="playProbs" class="probs"></div>
           <div id="playMeta" class="reason"></div>
         </div>
@@ -156,12 +156,12 @@
 
     <div class="card">
       <div class="card-h">آزمون: ۲۴ وضعیت ثابت<button id="benchBtn" class="primary small">اجرا</button></div>
-      <div id="bench" class="bench"><p class="muted">تصمیم Laya با یک قاعده‌ی مرجع شفاف (صف بیشتر + اولویت آمبولانس) مقایسه می‌شود. این «دقت واقعی» نیست؛ فقط نشان می‌دهد تصمیم‌ها منطقی و سازگارند.</p></div>
+      <div id="bench" class="bench"><p class="muted">تصمیم Jev با یک قاعده‌ی مرجع شفاف (صف بیشتر + اولویت آمبولانس) مقایسه می‌شود. این «دقت واقعی» نیست؛ فقط نشان می‌دهد تصمیم‌ها منطقی و سازگارند.</p></div>
     </div>
 
     <div class="card note">
       <div class="card-h">چرا جمله و نه عدد خام؟</div>
-      <p>Laya برای تصمیم‌گیری روی متن ساخته شده، نه برای حساب کردن. در آزمایش‌های ما با عددهای خام (مثلاً «۱۴ ماشین در برابر ۱۱») دقت ~۵۰ تا ۷۵ درصد بود. وقتی کل شهر در یک JSON بزرگ داده می‌شد (کاری که نسخه‌ی قبلی می‌کرد)، از سقف ۵۱۲ توکن مدل رد می‌شد و برای همه‌ی چهارراه‌ها «اولویت امدادی» جواب می‌داد. با یک جمله‌ی کوتاه برای هر چهارراه که مقایسه را صریح می‌گوید، روی هر ۷۵ ترکیب آزمایش‌شده درست جواب داد؛ از جمله ۲۵ حالتی که آمبولانس در خیابان خلوت‌تر است و Laya باید برخلاف «صف بیشتر» تصمیم بگیرد.</p>
+      <p>وضعیت هر چهارراه جداگانه خلاصه می‌شود. متن می‌گوید کدام مسیر صف بیشتری دارد و آمبولانس از کجا می‌آید تا Jev برای همین چهارراه یکی از دو جهت را انتخاب کند.</p>
     </div>
   </div>
 </section>
@@ -175,7 +175,7 @@
   <label>API Key<input id="apiKey" type="password" placeholder="برای Ollama خالی بگذار" dir="ltr" autocomplete="off"></label>
   <div class="modal-actions"><button id="testLlm">تست اتصال</button><button id="saveLlm" class="primary">ذخیره</button></div>
   <div id="llmResult" class="reason"></div>
-  <p class="muted">LLM همان جمله‌هایی را می‌بیند که Laya می‌بیند و باید <code>ns</code> یا <code>ew</code> برگرداند. کلید فقط در حافظه‌ی همین اجرای سرور نگه‌داری می‌شود.</p>
+  <p class="muted">LLM همان جمله‌هایی را می‌بیند که Jev می‌بیند و باید <code>ns</code> یا <code>ew</code> برگرداند. کلید فقط در حافظه‌ی همین اجرای سرور نگه‌داری می‌شود.</p>
 </div></div>
 
 <script src="/static/vendor/three.min.js"></script>

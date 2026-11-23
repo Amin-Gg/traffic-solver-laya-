@@ -14,5 +14,5 @@ if errorlevel 1 (
 )
 echo.
 echo Traffic AI Lab is starting at http://localhost:8000
-echo First Laya inference may download/load the model.
+echo Jev uses TYPESAFE_API_KEY from your environment or the Compose .env file.
 start http://localhost:8000

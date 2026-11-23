@@ -1,4 +1,4 @@
-/* Laya playground + tutorial page. Standalone: talks only to /api/laya/predict and /api/status. */
+/* Jev playground + tutorial page. Standalone: talks only to /api/jev/predict and /api/status. */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
@@ -24,7 +24,7 @@ const PRESETS = [
     { id: 'needs_code', type: 'noul', ins: 'Does the user ask for a program or code?', crit: '' },
     { id: 'difficulty', type: 'score', ins: 'How difficult is this request?', crit: 'easy\nmedium\nhard' },
   ] },
-  { name: '⭐ تحلیل نظر (نمونه‌ی خطا)', note: 'جواب درست این نمونه «mixed» است (هم تعریف دارد هم شکایت)، ولی مدل پایه معمولاً «negative» می‌گوید. مدل پایه بدون fine-tune اشتباه هم می‌کند؛ برای کار جدی روی داده‌ی حوزه‌ی خودت fine-tune کن و با answer_confidence آستانه بگذار.', state: 'The battery lasts two days and the screen is gorgeous, but the charger broke after a week.', qs: [
+  { name: '⭐ تحلیل نظر', note: 'جواب درست این نمونه «mixed» است؛ متن هم تعریف دارد و هم شکایت. احتمال گزینه‌ها را با متن مقایسه کن.', state: 'The battery lasts two days and the screen is gorgeous, but the charger broke after a week.', qs: [
     { id: 'sentiment', type: 'choice', ins: 'What is the overall sentiment of the review?', crit: 'positive: mostly praise\nnegative: mostly complaints\nmixed: both praise and complaints' },
     { id: 'defect', type: 'noul', ins: 'Does the review mention a broken or faulty part?', crit: '' },
     { id: 'stars', type: 'score', ins: 'How many stars would this reviewer give?', crit: '1 star\n2 stars\n3 stars\n4 stars\n5 stars' },
@@ -39,6 +39,7 @@ const PRESETS = [
 ];
 
 let qs = [];
+let jevModel = 'jev-latest';
 let codeMode = 'py', currentNote = '';
 
 // ------------------------------------------------------------------ question builder
@@ -53,7 +54,7 @@ function loadPreset(i) {
   $$('.preset').forEach(b => b.classList.toggle('active', +b.dataset.i === i));
   renderQuestions(); onStateInput(); updateCode();
   currentNote = p.note || '';
-  $('#results').innerHTML = '<p class="muted">«بپرس از Laya» را بزن.</p>'; $('#meta').textContent = '';
+  $('#results').innerHTML = '<p class="muted">«بپرس از Jev» را بزن.</p>'; $('#meta').textContent = '';
 }
 const CRIT_HELP = {
   choice: 'هر خط یک گزینه: label: توضیح',
@@ -88,7 +89,7 @@ function parseCriteria(q) {
   if (q.type === 'score') return lines;
   const pairs = lines.map(l => { const k = l.indexOf(':'); return k > 0 ? [l.slice(0, k).trim(), l.slice(k + 1).trim()] : [l, null]; });
   if (q.type === 'noul') return pairs.length ? Object.fromEntries(pairs.filter(([k]) => /^(true|false)$/i.test(k)).map(([k, v]) => [k.toLowerCase(), v || k])) : null;
-  return pairs.every(([, v]) => v === null) ? pairs.map(([k]) => k) : Object.fromEntries(pairs.map(([k, v]) => [k, v || k]));
+  return Object.fromEntries(pairs.map(([k, v]) => [k, v || k]));
 }
 function buildQuestions() {
   const out = {};
@@ -109,20 +110,34 @@ function readState() {
 function onStateInput(e) { if (e) currentNote = ''; $('#langWarn').hidden = !/[؀-ۿ]/.test($('#state').value); updateCode(); }
 
 // ------------------------------------------------------------------ code generation
-function pyLiteral(v, indent = 0) {
-  return JSON.stringify(v, null, 4).replace(/\btrue\b/g, 'True').replace(/\bfalse\b/g, 'False').replace(/\bnull\b/g, 'None')
-    .split('\n').join('\n' + ' '.repeat(indent));
-}
 function updateCode() {
-  const state = readState(), questions = buildQuestions();
+  const body = { model: jevModel, state: readState(), questions: buildQuestions() };
   let code;
   if (codeMode === 'py') {
-    code = `import laya\n\nagent = laya.load("convaiinnovations/laya")   # load once, reuse\n\nstate = ${pyLiteral(state)}\nquestions = ${pyLiteral(questions)}\n\nresult = agent.predict(state, questions)\nfor qid, ans in result["answers"].items():\n    print(qid, ans)`;
+    code = [
+      'import json',
+      'import os',
+      'import httpx',
+      '',
+      'payload = json.loads(' + JSON.stringify(JSON.stringify(body)) + ')',
+      'response = httpx.post(',
+      '    "https://api.typesafe.ai/v1/systemone",',
+      '    headers={"Authorization": "Bearer " + os.environ["TYPESAFE_API_KEY"]},',
+      '    json=payload, timeout=30,',
+      ')',
+      'response.raise_for_status()',
+      'for qid, answer in response.json()["answers"].items():',
+      '    print(qid, answer)',
+    ].join('\n');
   } else if (codeMode === 'curl') {
-    const body = JSON.stringify({ state, questions }).replace(/'/g, "'\\''");
-    code = `# pip install "laya[serve]" && laya-serve\ncurl -X POST http://localhost:8000/v1/systemone \\\n  -H "Content-Type: application/json" \\\n  -d '${body}'`;
+    code = [
+      'curl --fail-with-body https://api.typesafe.ai/v1/systemone \\',
+      '  -H "Authorization: Bearer $TYPESAFE_API_KEY" \\',
+      '  -H "Content-Type: application/json" \\',
+      "  --data '" + JSON.stringify(body).replace(/'/g, "'\\''") + "'",
+    ].join('\n');
   } else {
-    code = JSON.stringify({ state, questions }, null, 2);
+    code = JSON.stringify(body, null, 2);
   }
   $('#code').textContent = code;
 }
@@ -133,13 +148,13 @@ async function run() {
   if (!Object.keys(body.questions).length) { $('#results').innerHTML = '<div class="err">حداقل یک سؤال با شناسه لازم است.</div>'; return; }
   const btn = $('#run'); btn.disabled = true; btn.textContent = 'در حال پرسیدن…';
   try {
-    const r = await fetch('/api/laya/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const r = await fetch('/api/jev/predict', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json();
     if (!r.ok) { $('#results').innerHTML = `<div class="err">${esc(d.error || d.detail || r.statusText)}</div>`; $('#meta').textContent = ''; return; }
     renderResults(d, body.questions);
   } catch (e) {
     $('#results').innerHTML = `<div class="err">${esc(e)}</div>`;
-  } finally { btn.disabled = false; btn.textContent = '⚡ بپرس از Laya'; }
+  } finally { btn.disabled = false; btn.textContent = '⚡ بپرس از Jev'; }
 }
 
 function bars(probs, winner, labelOf = k => k) {
@@ -148,9 +163,9 @@ function bars(probs, winner, labelOf = k => k) {
 }
 function renderResults(d, questions) {
   const tokens = d.usage && d.usage.input_tokens;
-  $('#meta').textContent = `${fa(d.latency_ms)} ms · ${tokens ? fa(tokens) + ' توکن ورودی · ' : ''}${d.device || ''}`;
+  $('#meta').textContent = `${fa(d.latency_ms)} ms · ${tokens ? fa(tokens) + ' توکن ورودی · ' : ''}${d.model || ''}${d.device ? ' · ' + d.device : ''}`;
   $('#results').innerHTML = Object.entries(d.answers).map(([id, a]) => {
-    const conf = a.answer_confidence != null ? `<small>اطمینان ${pct(a.answer_confidence)}</small>` : '';
+    const conf = a.confidence != null ? `<small>اطمینان ${pct(a.confidence)}</small>` : '';
     if (a.type === 'choice') {
       return `<div class="res"><div class="res-h"><code>${esc(id)}</code><span class="ans" dir="ltr">${esc(a.choice)}</span>${conf}</div>${bars(a.probabilities, a.choice)}</div>`;
     }
@@ -170,10 +185,14 @@ function renderResults(d, questions) {
 async function pollStatus() {
   try {
     const s = await (await fetch('/api/status')).json();
-    const map = { ready: ['ok', `مدل آماده · ${s.laya.device || 'cpu'}`], loading: ['wait', 'در حال بارگذاری مدل…'], idle: ['wait', 'در انتظار مدل'], error: ['bad', 'مدل بارگذاری نشد'] };
-    const [cls, txt] = map[s.laya.status] || map.idle;
-    $('#pill').className = 'pill ' + cls; $('#pill').lastChild.textContent = txt; $('#pill').title = s.laya.error || s.laya.model;
-    if (s.laya.status !== 'ready' && s.laya.status !== 'error') setTimeout(pollStatus, 2000);
+    const map = { ready: ['ok', 'Jev تنظیم شده · TypeSafe API'], loading: ['wait', 'در حال اتصال به Jev…'], idle: ['wait', 'در انتظار مدل'], error: ['bad', 'Jev در دسترس نیست'] };
+    if (s.jev.model && s.jev.model !== jevModel) {
+      jevModel = s.jev.model;
+      updateCode();
+    }
+    const [cls, txt] = map[s.jev.status] || map.idle;
+    $('#pill').className = 'pill ' + cls; $('#pill').lastChild.textContent = txt; $('#pill').title = s.jev.error || s.jev.model;
+    setTimeout(pollStatus, 4000);
   } catch { $('#pill').className = 'pill bad'; $('#pill').lastChild.textContent = 'سرور در دسترس نیست'; }
 }
 
