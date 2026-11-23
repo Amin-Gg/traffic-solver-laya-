@@ -171,7 +171,7 @@ def _decision(s: Dict[str, Any], axis: str, probs: Dict[str, float], text: str) 
 
 # --------------------------------------------------------------------------- brains
 
-JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+JEV_ENDPOINT = "https://jevtypesafe.org/api/v1/decide"
 JEV_BATCH_SIZE = 4
 
 
@@ -179,9 +179,9 @@ class JevBrain:
     name = "jev"
 
     def __init__(self):
-        self.model_id = os.getenv("JEV_MODEL", "").strip() or "jev-latest"
+        self.model_id = os.getenv("JEV_MODEL", "").strip() or "jev"
         self.api_key = os.getenv("TYPESAFE_API_KEY", "").strip()
-        self.device = "TypeSafe API"
+        self.device = "jevtypesafe.org API"
         self.error = None if self.api_key else "Set TYPESAFE_API_KEY to enable Jev."
         self.retry_at = 0.0
         self._lock = asyncio.Lock()
@@ -215,21 +215,21 @@ class JevBrain:
                 "model": self.model_id, "state": state, "questions": questions,
             })
         except httpx.RequestError as exc:
-            raise self._unavailable("Could not reach the TypeSafe API.") from exc
+            raise self._unavailable("Could not reach the jevtypesafe.org API.") from exc
 
         code = response.status_code
         if code in (400, 413, 422):
             raise ValueError(f"Jev rejected the state or questions (HTTP {code}). Check the question format and limits.")
         if code in (401, 403):
-            raise self._unavailable(f"TypeSafe rejected access (HTTP {code}). Check the API key and model access.", 60)
+            raise self._unavailable(f"jevtypesafe.org rejected access (HTTP {code}). Check the API key and model access.", 60)
         if code == 402:
-            raise self._unavailable("TypeSafe reports insufficient credit (HTTP 402).", 60)
+            raise self._unavailable("jevtypesafe.org reports insufficient credit (HTTP 402).", 60)
         if code == 429:
             retry_after = response.headers.get("Retry-After", "")
             delay = max(1, int(retry_after)) if retry_after.isdecimal() and len(retry_after) < 8 else 10
-            raise self._unavailable("TypeSafe API rate limit reached (HTTP 429).", delay)
+            raise self._unavailable("jevtypesafe.org API rate limit reached (HTTP 429).", delay)
         if not response.is_success:
-            raise self._unavailable(f"TypeSafe API is unavailable (HTTP {code}).")
+            raise self._unavailable(f"jevtypesafe.org API is unavailable (HTTP {code}).")
 
         try:
             result = response.json()
@@ -240,7 +240,7 @@ class JevBrain:
             ):
                 raise ValueError("Invalid answers")
         except (KeyError, ValueError, TypeError, AttributeError) as exc:
-            raise self._unavailable("TypeSafe API returned an invalid answer.") from exc
+            raise self._unavailable("jevtypesafe.org API returned an invalid answer.") from exc
         if time.monotonic() >= self.retry_at:
             self.error = None
         return result

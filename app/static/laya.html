@@ -32,11 +32,11 @@
     <div class="cta"><a class="btn primary" href="#play">همین حالا امتحان کن ↓</a><a class="btn" href="#install">راه‌اندازی API</a></div>
   </div>
   <div class="hero-card" dir="ltr">
-<pre><code>curl https://api.typesafe.ai/v1/systemone \
+<pre><code>curl https://jevtypesafe.org/api/v1/decide \
   -H "Authorization: Bearer $TYPESAFE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-latest",
+    "model": "jev",
     "state": "We were billed twice. Please refund us.",
     "questions": {
       "refund": {"type": "noul",
@@ -73,7 +73,7 @@
 <!-- ============================================================ PLAYGROUND -->
 <section id="play" class="block">
   <h2>آزمایشگاه</h2>
-  <p class="muted">یک نمونه انتخاب کن یا خودت متن و سؤال بنویس. سرور این پروژه متن و سؤال‌ها را به API رسمی TypeSafe می‌فرستد.</p>
+  <p class="muted">یک نمونه انتخاب کن یا خودت متن و سؤال بنویس. سرور این پروژه متن و سؤال‌ها را به API سایت مستقل jevtypesafe.org می‌فرستد.</p>
   <div class="presets" id="presets"></div>
 
   <div class="play">
@@ -114,7 +114,7 @@
 source .venv/bin/activate</code></pre></li>
     <li><b>وابستگی HTTP را نصب کن:</b>
       <pre class="code" dir="ltr"><code>pip install httpx</code></pre></li>
-    <li>یک کلید در <a href="https://console.typesafe.ai/" target="_blank" rel="noopener">پنل رسمی TypeSafe</a> بساز و مقدار آن را در متغیر محیطی <code>TYPESAFE_API_KEY</code> روی سرور بگذار.</li>
+    <li>یک کلید در <a href="https://jevtypesafe.org/" target="_blank" rel="noopener">پنل jevtypesafe.org</a> بساز و مقدار آن را در متغیر محیطی <code>TYPESAFE_API_KEY</code> روی سرور بگذار.</li>
     <li>در Colab، همین مقدار را در بخش <b>Secrets</b> و با نام <code>TYPESAFE_API_KEY</code> ثبت کن و دسترسی نوت‌بوک را فعال کن.</li>
   </ol>
 </section>
@@ -124,7 +124,7 @@ source .venv/bin/activate</code></pre></li>
   <h2>استفاده</h2>
 
   <h3>۱. اولین پیش‌بینی</h3>
-  <p>وضعیت و سؤال‌ها را به سرویس TypeSafe بفرست.</p>
+  <p>وضعیت و سؤال‌ها را به سرویس jevtypesafe.org بفرست.</p>
 <pre class="code" dir="ltr"><code>import os
 import httpx
 
@@ -140,9 +140,9 @@ questions = {
 }
 
 response = httpx.post(
-    "https://api.typesafe.ai/v1/systemone",
+    "https://jevtypesafe.org/api/v1/decide",
     headers={"Authorization": "Bearer " + os.environ["TYPESAFE_API_KEY"]},
-    json={"model": "jev-latest", "state": state, "questions": questions},
+    json={"model": "jev", "state": state, "questions": questions},
     timeout=30,
 )
 response.raise_for_status()
@@ -198,7 +198,7 @@ needs_review = answers["department"]["confidence"] &lt; 0.6</code></pre>
     <a href="https://typesafe.ai/" target="_blank" rel="noopener">TypeSafe</a>
     <a href="https://docs.typesafe.ai/models" target="_blank" rel="noopener">مدل‌ها</a>
     <a href="https://docs.typesafe.ai/" target="_blank" rel="noopener">مستندات رسمی</a>
-    <a href="https://console.typesafe.ai/" target="_blank" rel="noopener">پنل و آزمایشگاه TypeSafe</a>
+    <a href="https://jevtypesafe.org/" target="_blank" rel="noopener">پنل و آزمایشگاه jevtypesafe.org</a>
   </div>
 </section>
 </main>

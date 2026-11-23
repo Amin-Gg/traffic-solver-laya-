@@ -141,10 +141,10 @@ def test_jev_decide_uses_provider_answer_and_deduplicates_state(monkeypatch):
     calls = []
 
     def respond(req):
-        assert str(req.url) == "https://api.typesafe.ai/v1/systemone"
+        assert str(req.url) == "https://jevtypesafe.org/api/v1/decide"
         assert req.headers["Authorization"] == "Bearer test-key"
         payload = json.loads(req.content)
-        assert payload["model"].startswith("jev-")
+        assert payload["model"] == "jev"
         assert payload["questions"] == JEV_QUESTION
         calls.append(payload["state"])
         return httpx.Response(200, json={"answers": {

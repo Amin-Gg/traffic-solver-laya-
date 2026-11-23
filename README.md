@@ -2,7 +2,7 @@
 
 **[English](#english) · [فارسی](#فارسی)**
 
-A 3D city whose traffic lights are controlled by **[Jev](https://docs.typesafe.ai/introduction)**, a structured decision model served by TypeSafe. Every decision is explained on screen: what Jev saw, what it read, what it answered, and what the light did. The project also includes a standalone **Jev playground + tutorial page**.
+A 3D city whose traffic lights are controlled by **[Jev](https://docs.typesafe.ai/introduction)**, a structured decision model served here through the independent jevtypesafe.org API. Every decision is explained on screen: what Jev saw, what it read, what it answered, and what the light did. The project also includes a standalone **Jev playground + tutorial page**.
 
 ![Live city](docs/live-city.png)
 
@@ -34,7 +34,7 @@ app.js     panels, compare, playground    ◄──  "ns" / "ew" + probabilities
 - The simulation runs in the browser, so motion is smooth.
 - Jev only sets the *desired* phase. A safety layer does the actual switching: minimum green 12 s, yellow 2.5 s, all-red 1.2 s, and minimum green 1.5 s for an ambulance.
 - Each intersection is summarised as a short sentence, e.g. *"North-south traffic is heavy. East-west traffic is light. More cars are waiting on the north-south road. An ambulance is coming on the east-west road."*
-- There are only 105 possible sentences. The server caches each successful answer for the session. An unseen sentence gets its own TypeSafe request. Set `JEV_PREWARM=1` to fill the cache in the background at startup.
+- There are only 105 possible sentences. The server caches each successful answer for the session. An unseen sentence gets its own jevtypesafe.org request. Set `JEV_PREWARM=1` to fill the cache in the background at startup.
 
 Historical measurements from the original Laya implementation:
 
@@ -49,7 +49,7 @@ In offline simulations (3 seeds, 5 min each), ambulances waited ~7 s at red ligh
 
 ### Setup
 
-**Requirements:** Python 3.10+, internet access and a [TypeSafe API key](https://console.typesafe.ai/).
+**Requirements:** Python 3.10+, internet access and a [jevtypesafe.org API key](https://jevtypesafe.org/).
 
 ```bash
 git clone https://github.com/YOUR-USERNAME/traffic-solver-laya-.git
@@ -98,7 +98,7 @@ tests/               pytest suite
 ### Notes
 
 - The page loads the Vazirmatn font from Google Fonts. Everything else, including Three.js, is served locally.
-- Jev is served by TypeSafe. Legacy API paths containing `laya` also use Jev.
+- Jev is accessed through the independent jevtypesafe.org API. Legacy API paths containing `laya` also use Jev.
 
 ---
 
@@ -135,7 +135,7 @@ tests/               pytest suite
 
 ### راه‌اندازی
 
-**پیش‌نیاز:** پایتون ۳٫۱۰ یا جدیدتر، اینترنت و [کلید API TypeSafe](https://console.typesafe.ai/).
+**پیش‌نیاز:** پایتون ۳٫۱۰ یا جدیدتر، اینترنت و [کلید API سایت jevtypesafe.org](https://jevtypesafe.org/).
 
 </div>
 
@@ -182,6 +182,6 @@ LLM همان جمله‌هایی را می‌بیند که Jev می‌بیند �
 **نکته‌ها:**
 - اگر حافظه‌ی سیستم کم است، قبل از اجرا برنامه‌ها و تب‌های سنگین را ببندید.
 - فونت Vazirmatn از Google Fonts بارگذاری می‌شود. بقیه‌ی فایل‌ها، از جمله Three.js، محلی‌اند.
-- Jev را TypeSafe ارائه می‌کند. آدرس‌های قدیمی دارای `laya` همچنان باز می‌شوند و از Jev استفاده می‌کنند.
+- Jev از طریق سرویس مستقل jevtypesafe.org فراخوانی می‌شود. آدرس‌های قدیمی دارای `laya` همچنان باز می‌شوند و از Jev استفاده می‌کنند.
 
 </div>

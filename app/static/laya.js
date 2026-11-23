@@ -39,7 +39,7 @@ const PRESETS = [
 ];
 
 let qs = [];
-let jevModel = 'jev-latest';
+let jevModel = 'jev';
 let codeMode = 'py', currentNote = '';
 
 // ------------------------------------------------------------------ question builder
@@ -121,7 +121,7 @@ function updateCode() {
       '',
       'payload = json.loads(' + JSON.stringify(JSON.stringify(body)) + ')',
       'response = httpx.post(',
-      '    "https://api.typesafe.ai/v1/systemone",',
+      '    "https://jevtypesafe.org/api/v1/decide",',
       '    headers={"Authorization": "Bearer " + os.environ["TYPESAFE_API_KEY"]},',
       '    json=payload, timeout=30,',
       ')',
@@ -131,7 +131,7 @@ function updateCode() {
     ].join('\n');
   } else if (codeMode === 'curl') {
     code = [
-      'curl --fail-with-body https://api.typesafe.ai/v1/systemone \\',
+      'curl --fail-with-body https://jevtypesafe.org/api/v1/decide \\',
       '  -H "Authorization: Bearer $TYPESAFE_API_KEY" \\',
       '  -H "Content-Type: application/json" \\',
       "  --data '" + JSON.stringify(body).replace(/'/g, "'\\''") + "'",
@@ -185,7 +185,7 @@ function renderResults(d, questions) {
 async function pollStatus() {
   try {
     const s = await (await fetch('/api/status')).json();
-    const map = { ready: ['ok', 'Jev تنظیم شده · TypeSafe API'], loading: ['wait', 'در حال اتصال به Jev…'], idle: ['wait', 'در انتظار مدل'], error: ['bad', 'Jev در دسترس نیست'] };
+    const map = { ready: ['ok', 'Jev تنظیم شده · jevtypesafe.org API'], loading: ['wait', 'در حال اتصال به Jev…'], idle: ['wait', 'در انتظار مدل'], error: ['bad', 'Jev در دسترس نیست'] };
     if (s.jev.model && s.jev.model !== jevModel) {
       jevModel = s.jev.model;
       updateCode();
